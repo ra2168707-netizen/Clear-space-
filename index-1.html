@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Study Space</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+:root{--bg:#fdfaf6;--beige:#f3e9dc;--pink:#f9dde7;--blue:#d9ebf9;--lav:#e6ddf7;--ink:#3a3552;--soft:#8a84a3;--line:#ece4f0;--accent:#9b86d6;--ok:#7fc3a0;--late:#e58aa3}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Nunito,Cairo,sans-serif}
+h1,h2,h3{margin:0;font-weight:800}button,input,select,textarea{font:inherit;color:inherit}
+.app{max-width:1000px;margin:auto;padding:16px 16px 90px}
+header{display:flex;justify-content:space-between;align-items:center;padding:8px 0 16px}
+header h1{font-size:1.4rem}.mode{font-size:.8rem;background:var(--beige);padding:4px 10px;border-radius:99px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;gap:6px;justify-content:center;padding:10px;background:#fffdfb;border-top:1px solid var(--line);z-index:5}
+nav button{border:0;background:none;padding:9px 14px;border-radius:14px;cursor:pointer;font-weight:600;color:var(--soft)}
+nav button.on{background:var(--lav);color:var(--ink)}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px}
+.tint-pink{background:var(--pink);border-color:transparent}.tint-blue{background:var(--blue);border-color:transparent}.tint-lav{background:var(--lav);border-color:transparent}.tint-beige{background:var(--beige);border-color:transparent}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.grow{flex:1;min-width:140px}
+input,select,textarea{border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:#fff;width:100%}
+textarea{min-height:80px;resize:vertical}
+.btn{border:0;background:var(--accent);color:#fff;padding:9px 16px;border-radius:12px;font-weight:700;cursor:pointer}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}.btn.sm{padding:5px 10px;font-size:.85rem}
+.chip{display:inline-block;font-size:.78rem;padding:2px 10px;border-radius:99px;background:var(--beige);margin:0 4px 4px 0}
+.chip.high{background:var(--pink)}.chip.late{background:var(--late);color:#fff}.chip.ok{background:var(--ok);color:#fff}
+.item{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}.item:last-child{border:0}
+.item.done .t{text-decoration:line-through;color:var(--soft)}
+.sub{margin:6px 0 0 4px;font-size:.92rem}.sub label{display:flex;gap:8px;align-items:center}
+input[type=checkbox]{width:auto;accent-color:var(--accent)}
+.muted{color:var(--soft);font-size:.9rem}.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.top3{display:flex;gap:12px;align-items:center}.num{width:34px;height:34px;border-radius:50%;background:#fff;display:grid;place-items:center;font-weight:800}
+.bar{height:10px;background:#fff;border-radius:99px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
+.opt{display:block;width:100%;text-align:left;margin:6px 0;padding:9px 12px;border-radius:12px;border:1px solid var(--line);background:#fff;cursor:pointer}
+.opt.right{background:#dff3e8;border-color:var(--ok)}.opt.wrong{background:var(--pink);border-color:var(--late)}
+.empty{text-align:center;color:var(--soft);padding:22px}
+[dir=rtl]{font-family:Cairo,Nunito,sans-serif}
+</style>
+</head>
+<body>
+<div class="app">
+<header><h1>My Study Space</h1><div class="row"><span class="mode" id="mode"></span><button class="btn ghost sm" id="logout" hidden>Log out</button></div></header>
+<main id="view"></main>
+</div>
+<nav id="nav"></nav>
+
+<script>
+/* ====== 1) حطي بيانات Supabase بتاعتك هنا (Project Settings > API) ====== */
+const SUPABASE_URL = "";
+const SUPABASE_ANON_KEY = "";
+/* لو سبتيهم فاضيين الموقع بيشتغل تجربة على الجهاز بس */
+
+const sb = (SUPABASE_URL && SUPABASE_ANON_KEY) ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+let uid = "local";
+
+/* ====== طبقة البيانات ====== */
+const db = {
+  async list(t){
+    if(!sb) return JSON.parse(localStorage.getItem("ss_"+t)||"[]");
+    const {data,error}=await sb.from(t).select("*").order("created_at",{ascending:false}); if(error) toast(error.message); return data||[];
+  },
+  async add(t,row){
+    if(!sb){const a=await db.list(t);a.unshift({...row,id:crypto.randomUUID(),created_at:new Date().toISOString()});localStorage.setItem("ss_"+t,JSON.stringify(a));return}
+    const {error}=await sb.from(t).insert(row); if(error) toast(error.message);
+  },
+  async upd(t,id,patch){
+    if(!sb){const a=await db.list(t);const r=a.find(x=>x.id===id);Object.assign(r,patch);localStorage.setItem("ss_"+t,JSON.stringify(a));return}
+    const {error}=await sb.from(t).update(patch).eq("id",id); if(error) toast(error.message);
+  },
+  async del(t,id){
+    if(!sb){const a=(await db.list(t)).filter(x=>x.id!==id);localStorage.setItem("ss_"+t,JSON.stringify(a));return}
+    await sb.from(t).delete().eq("id",id);
+  }
+};
+
+/* ====== أدوات ====== */
+const $=s=>document.querySelector(s), esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today=()=>new Date().toISOString().slice(0,10);
+const daysLeft=d=>d?Math.ceil((new Date(d)-new Date(today()))/864e5):null;
+function toast(m){alert(m)}
+function dueChip(d,done){if(!d)return"";const n=daysLeft(d);if(done)return`<span class="chip">${d}</span>`;
+  return n<0?`<span class="chip late">Late ${-n}d</span>`:n===0?`<span class="chip high">Today</span>`:`<span class="chip">${n}d left</span>`}
+const PR={high:3,medium:2,low:1};
+const ST={not_started:"Not started",started:"Started",review:"Needs review",done:"Finished"};
+
+const tabs=[["myday","My Day"],["tasks","Tasks"],["planner","Planner"],["ideas","Ideas"],["rec","Recordings"]];
+let tab="myday";
+$("#nav").innerHTML=tabs.map(([k,l])=>`<button data-t="${k}">${l}</button>`).join("");
+$("#nav").onclick=e=>{const b=e.target.closest("button");if(b){tab=b.dataset.t;render()}};
+$("#mode").textContent=sb?"Synced":"Demo (this device only)";
+
+async function render(){
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
+  const v=$("#view");
+  if(sb && !(await sb.auth.getSession()).data.session){return loginView()}
+  $("#logout").hidden=!sb;
+  v.innerHTML=await ({myday:myDay,tasks:tasksView,planner:plannerView,ideas:ideasView,rec:recView}[tab])();
+}
+$("#logout").onclick=async()=>{await sb.auth.signOut();render()};
+
+function loginView(){
+  $("#view").innerHTML=`<div class="card tint-lav" style="max-width:380px;margin:40px auto">
+  <h2>Welcome 🌸</h2><p class="muted">Log in or create your account.</p>
+  <input id="em" type="email" placeholder="Email"><br><br><input id="pw" type="password" placeholder="Password (6+ characters)"><br><br>
+  <div class="row"><button class="btn" data-a="in">Log in</button><button class="btn ghost" data-a="up">Sign up</button></div></div>`;
+}
+
+/* ====== My Day ====== */
+async function myDay(){
+  const [T,L]=await Promise.all([db.list("tasks"),db.list("lectures")]);
+  const items=[
+    ...T.filter(t=>!t.done).map(t=>({kind:"task",id:t.id,title:t.title,due:t.deadline,score:PR[t.priority]*2+urgency(t.deadline)})),
+    ...L.filter(l=>l.status!=="done").map(l=>({kind:"lecture",id:l.id,title:`${l.subject}: ${l.title}`,due:l.due,score:l.difficulty*1.5+urgency(l.due)+(l.status==="review"?1:0)}))
+  ].sort((a,b)=>b.score-a.score);
+  const top=items.slice(0,3), soon=items.filter(i=>i.due&&daysLeft(i.due)<=3);
+  const doneN=T.filter(t=>t.done).length+L.filter(l=>l.status==="done").length, all=T.length+L.length;
+  return `<div class="card tint-pink"><h2>Top 3 for today</h2><div style="margin-top:10px">${top.length?top.map((i,n)=>`
+    <div class="top3 card" style="margin:8px 0"><div class="num">${n+1}</div><div class="grow"><b>${esc(i.title)}</b><div>${dueChip(i.due)}<span class="chip">${i.kind}</span></div></div>
+    ${n===0?'<span class="chip ok">Start here</span>':""}</div>`).join(""):'<div class="empty">Nothing waiting. Add a task or lecture ✨</div>'}</div></div>
+  <div class="grid"><div class="card tint-blue"><h3>Due within 3 days</h3>${soon.length?soon.map(i=>`<div class="item"><div class="grow">${esc(i.title)}</div>${dueChip(i.due)}</div>`).join(""):'<p class="muted">All calm.</p>'}</div>
+  <div class="card tint-lav"><h3>Progress</h3><p class="muted">${doneN} done · ${all-doneN} left</p><div class="bar"><i style="width:${all?doneN/all*100:0}%"></i></div></div></div>`;
+}
+function urgency(d){if(!d)return 0;const n=daysLeft(d);return n<0?6:n===0?5:n<=2?4:n<=5?2:n<=10?1:0}
+
+/* ====== Tasks ====== */
+async function tasksView(){
+  const T=await db.list("tasks");
+  const sorted=[...T].sort((a,b)=>a.done-b.done||PR[b.priority]-PR[a.priority]);
+  return `<div class="card tint-beige"><h2>New task</h2><div class="row" style="margin-top:10px">
+  <input class="grow" id="tt" placeholder="What do you need to do?"><input id="td" type="date" style="width:auto">
+  <select id="tp" style="width:auto"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select>
+  <input class="grow" id="ts" placeholder="Small steps, separated by commas (optional)"><button class="btn" data-a="addTask">Add</button></div></div>
+  <div class="card">${sorted.length?sorted.map(t=>`<div class="item ${t.done?"done":""}"><input type="checkbox" data-a="togTask" data-id="${t.id}" ${t.done?"checked":""}>
+  <div class="grow"><div class="t"><b>${esc(t.title)}</b></div><div>${dueChip(t.deadline,t.done)}<span class="chip ${t.priority==="high"?"high":""}">${t.priority}</span></div>
+  ${(t.subtasks||[]).map((s,i)=>`<div class="sub"><label><input type="checkbox" data-a="togSub" data-id="${t.id}" data-i="${i}" ${s.done?"checked":""}>${esc(s.text)}</label></div>`).join("")}</div>
+  <button class="btn ghost sm" data-a="del" data-t="tasks" data-id="${t.id}">✕</button></div>`).join(""):'<div class="empty">No tasks yet. Add your first one above.</div>'}</div>`;
+}
+
+/* ====== Planner ====== */
+let minutes=60;
+async function plannerView(){
+  const L=await db.list("lectures");
+  const open=L.filter(l=>l.status!=="done").sort((a,b)=>(b.difficulty*1.5+urgency(b.due))-(a.difficulty*1.5+urgency(a.due)));
+  let left=minutes;const plan=open.filter(l=>{if(l.minutes<=left){left-=l.minutes;return true}});
+  return `<div class="card tint-blue"><h2>Add lecture</h2><div class="row" style="margin-top:10px">
+  <input class="grow" id="ls" placeholder="Subject"><input class="grow" id="lt" placeholder="Lecture title"><input id="ld" type="date" style="width:auto">
+  <select id="lf" style="width:auto"><option value="1">Easy</option><option value="2" selected>Medium</option><option value="3">Hard</option></select>
+  <input id="lm" type="number" value="45" style="width:90px" title="Minutes"><button class="btn" data-a="addLec">Add</button></div></div>
+  <div class="card tint-lav"><div class="row"><b>I have</b><input id="avail" type="number" value="${minutes}" style="width:90px"><b>minutes</b><button class="btn sm" data-a="setMin">Plan it</button></div>
+  <p class="muted">${plan.length?plan.map(p=>esc(p.subject+": "+p.title)).join(" → "):"Nothing fits yet."}</p></div>
+  ${L.map(l=>`<div class="card"><div class="row"><div class="grow"><b>${esc(l.subject)}</b> · ${esc(l.title)}<div>${dueChip(l.due,l.status==="done")}<span class="chip">${"★".repeat(l.difficulty)} · ${l.minutes}m</span></div></div>
+  <select data-a="setStatus" data-id="${l.id}" style="width:auto">${Object.entries(ST).map(([k,v])=>`<option value="${k}" ${l.status===k?"selected":""}>${v}</option>`).join("")}</select>
+  <button class="btn ghost sm" data-a="del" data-t="lectures" data-id="${l.id}">✕</button></div>
+  <textarea data-a="sum" data-id="${l.id}" placeholder="Summary…" style="margin-top:8px">${esc(l.summary)}</textarea></div>`).join("")||'<div class="empty">Add your lectures to start planning.</div>'}`;
+}
+
+/* ====== Ideas ====== */
+let q="";
+async function ideasView(){
+  const I=(await db.list("ideas")).filter(i=>!q||(i.body+" "+(i.tags||[]).join(" ")).toLowerCase().includes(q.toLowerCase()));
+  return `<div class="card tint-pink"><h2>Idea Vault</h2><textarea id="ib" placeholder="Write it down fast…" style="margin-top:10px"></textarea>
+  <div class="row" style="margin-top:8px"><select id="is" style="width:auto"><option value="study">Study</option><option value="team">Team</option><option value="volunteering">Volunteering</option></select>
+  <input class="grow" id="ik" placeholder="Keywords, separated by commas"><button class="btn" data-a="addIdea">Save</button></div></div>
+  <input id="sq" placeholder="Search ideas and keywords" value="${esc(q)}" style="margin-bottom:12px">
+  ${I.map(i=>`<div class="card"><div class="row"><div class="grow">${esc(i.body)}<div style="margin-top:6px"><span class="chip">${i.source}</span>${(i.tags||[]).map(t=>`<span class="chip">#${esc(t)}</span>`).join("")}</div></div>
+  <button class="btn ghost sm" data-a="del" data-t="ideas" data-id="${i.id}">✕</button></div></div>`).join("")||'<div class="empty">No ideas found.</div>'}`;
+}
+
+/* ====== Recordings ====== */
+async function recView(){
+  const [R,L]=await Promise.all([db.list("recordings"),db.list("lectures")]);
+  const name=id=>{const l=L.find(x=>x.id===id);return l?`${l.subject}: ${l.title}`:"No lecture"};
+  return `<div class="card tint-lav"><h2>Upload a lecture recording</h2>
+  <p class="muted">${sb?"The audio is saved privately in your account. Transcript, key points and questions appear here after processing.":"Connect Supabase first to upload recordings."}</p>
+  <div class="row"><select id="rl" class="grow"><option value="">Which lecture?</option>${L.map(l=>`<option value="${l.id}">${esc(l.subject+": "+l.title)}</option>`).join("")}</select>
+  <input id="rf" type="file" accept="audio/*" class="grow"><button class="btn" data-a="upRec" ${sb?"":"disabled"}>Upload</button></div></div>
+  ${R.map(r=>`<div class="card"><div class="row"><b class="grow">${esc(name(r.lecture_id))}</b><span class="chip ${r.status==="done"?"ok":""}">${r.status==="done"?"Ready":"Waiting for processing"}</span>
+  <button class="btn ghost sm" data-a="del" data-t="recordings" data-id="${r.id}">✕</button></div>
+  ${(r.key_points||[]).length?`<h3 style="margin-top:12px">What the doctor stressed</h3><ul>${r.key_points.map(k=>`<li>${esc(k)}</li>`).join("")}</ul>`:""}
+  ${r.transcript?`<details><summary>Full transcript</summary><p style="white-space:pre-wrap">${esc(r.transcript)}</p></details>`:""}
+  ${(r.questions||[]).map((x,qi)=>`<div class="card tint-beige" style="margin-top:10px"><b>${esc(x.q)}</b>${x.options.map((o,oi)=>`<button class="opt" data-a="ans" data-r="${r.id}" data-q="${qi}" data-o="${oi}">${esc(o)}</button>`).join("")}<div class="muted" id="why-${r.id}-${qi}"></div></div>`).join("")}</div>`).join("")||'<div class="empty">No recordings yet.</div>'}`;
+}
+const quiz={}; // r.id -> questions
+async function answer(b){
+  const R=await db.list("recordings"),r=R.find(x=>x.id===b.dataset.r),x=r.questions[b.dataset.q],o=+b.dataset.o;
+  const group=b.parentElement.querySelectorAll(".opt");group.forEach((e,i)=>{e.disabled=true;if(i===x.answer)e.classList.add("right");else if(i===o)e.classList.add("wrong")});
+  $(`#why-${r.id}-${b.dataset.q}`).textContent=x.why||"";
+}
+
+/* ====== الأحداث ====== */
+document.addEventListener("click",async e=>{
+  const b=e.target.closest("[data-a]");if(!b)return;const a=b.dataset.a,id=b.dataset.id;
+  if(a==="in"||a==="up"){const f=a==="in"?sb.auth.signInWithPassword:sb.auth.signUp;
+    const {error}=await f.call(sb.auth,{email:$("#em").value,password:$("#pw").value});
+    if(error)return toast(error.message); if(a==="up")toast("Check your email to confirm, then log in.");return render()}
+  if(a==="addTask"){const t=$("#tt").value.trim();if(!t)return toast("Write the task first");
+    await db.add("tasks",{title:t,priority:$("#tp").value,deadline:$("#td").value||null,done:false,
+    subtasks:$("#ts").value.split(",").map(s=>s.trim()).filter(Boolean).map(text=>({text,done:false}))})}
+  else if(a==="togTask"){await db.upd("tasks",id,{done:b.checked})}
+  else if(a==="togSub"){const t=(await db.list("tasks")).find(x=>x.id===id);t.subtasks[+b.dataset.i].done=b.checked;await db.upd("tasks",id,{subtasks:t.subtasks})}
+  else if(a==="del"){if(!confirm("Delete?"))return;await db.del(b.dataset.t,id)}
+  else if(a==="addLec"){if(!$("#ls").value.trim()||!$("#lt").value.trim())return toast("Add subject and title");
+    await db.add("lectures",{subject:$("#ls").value.trim(),title:$("#lt").value.trim(),due:$("#ld").value||null,difficulty:+$("#lf").value,minutes:+$("#lm").value||45,status:"not_started",summary:""})}
+  else if(a==="setMin"){minutes=+$("#avail").value||60}
+  else if(a==="addIdea"){const t=$("#ib").value.trim();if(!t)return;
+    await db.add("ideas",{body:t,source:$("#is").value,tags:$("#ik").value.split(",").map(s=>s.trim()).filter(Boolean)})}
+  else if(a==="upRec"){const f=$("#rf").files[0];if(!f)return toast("Choose an audio file");
+    const {data:{user}}=await sb.auth.getUser(),path=`${user.id}/${Date.now()}-${f.name}`;
+    const {error}=await sb.storage.from("recordings").upload(path,f);if(error)return toast(error.message);
+    await db.add("recordings",{lecture_id:$("#rl").value||null,file_path:path})}
+  else if(a==="ans"){return answer(b)}
+  else return;
+  render();
+});
+document.addEventListener("change",async e=>{const b=e.target;
+  if(b.dataset.a==="setStatus"){await db.upd("lectures",b.dataset.id,{status:b.value});render()}
+  if(b.dataset.a==="sum"){await db.upd("lectures",b.dataset.id,{summary:b.value})}});
+document.addEventListener("input",e=>{if(e.target.id==="sq"){q=e.target.value;clearTimeout(window._s);window._s=setTimeout(async()=>{const p=e.target.selectionStart;await render();const n=$("#sq");n.focus();n.setSelectionRange(p,p)},250)}});
+render();
+</script>
+</body>
+</html>
